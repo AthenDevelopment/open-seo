@@ -1,0 +1,71 @@
+name: Deploy self-host (Iconic Digital)
+
+# Deploys the `selfhost` Alchemy stage to the Iconic Digital Cloudflare
+# account on every push to main. Gated by the `iconic-digital-selfhost`
+# GitHub Environment: a required reviewer must approve each run before the
+# deploy secrets are exposed, and the environment only unlocks for the
+# `main` branch. Never triggered by pull_request/pull_request_target —
+# untrusted PR code never gets a shot at these secrets, same discipline
+# pr-preview.yml uses for the preview stages.
+#
+# Required environment secrets (set on the `iconic-digital-selfhost`
+# environment in repo Settings, never committed): CLOUDFLARE_API_TOKEN
+# (scoped to the Iconic Digital account only: Workers Scripts/KV/D1/R2/
+# Workflows edit, Access Apps and Policies edit, Account Settings read),
+# CLOUDFLARE_ACCOUNT_ID (Iconic Digital's account id), ENV_SELFHOST (the
+# full contents of .env.selfhost — DATAFORSEO_API_KEY,
+# ACCESS_ALLOWED_EMAILS, and any optional secrets this self-host uses).
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - docs/**
+      - runbooks/**
+      - .agents/**
+      - web/**
+      - badseo/**
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-selfhost-iconic-digital
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # Keeps this workflow inert if it's ever synced to a different fork.
+    if: github.repository == 'AthenDevelopment/open-seo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: iconic-digital-selfhost
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Write .env.selfhost
+        run: printf '%s' "$ENV_SELFHOST" > .env.selfhost
+        env:
+          ENV_SELFHOST: ${{ secrets.ENV_SELFHOST }}
+
+      - name: Deploy to Iconic Digital
+        run: pnpm deploy:selfhost --yes

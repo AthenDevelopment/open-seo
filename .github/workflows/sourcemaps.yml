@@ -6,6 +6,8 @@ on:
 concurrency:
   group: sourcemaps-${{ github.ref }}
   cancel-in-progress: true
+permissions:
+  contents: read
 jobs:
   upload:
     if: github.repository != 'every-app/open-seo'
